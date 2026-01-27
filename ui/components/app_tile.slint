@@ -1,0 +1,46 @@
+import { Theme } from "../themes/arc_blueberry.slint";
+
+// Single app tile component - optimized for minimal redraws
+export component AppTile inherits Rectangle {
+    in property <string> name;
+    in property <string> icon;
+    in property <bool> selected: false;
+
+    callback clicked();
+
+    width: Theme.tile-width;
+    height: Theme.tile-height;
+    border-radius: Theme.tile-radius;
+    background: selected ? Theme.bg-tile-selected : Theme.bg-tile;
+    border-width: selected ? Theme.border-width : 0px;
+    border-color: Theme.accent-pink;
+
+    // Cache this tile when not selected (static content)
+    cache-rendering-hint: !selected;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 8px;
+        padding: 12px;
+
+        // Icon
+        Text {
+            text: icon;
+            font-size: Theme.font-icon;
+            color: selected ? Theme.fg-primary : Theme.fg-secondary;
+            horizontal-alignment: center;
+        }
+
+        // Label
+        Text {
+            text: name;
+            font-size: Theme.font-tile;
+            color: selected ? Theme.fg-primary : Theme.fg-secondary;
+            horizontal-alignment: center;
+        }
+    }
+
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}

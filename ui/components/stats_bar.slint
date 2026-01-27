@@ -1,0 +1,111 @@
+import { Theme } from "../themes/arc_blueberry.slint";
+
+// Single stat item
+component StatItem inherits VerticalLayout {
+    in property <string> icon;
+    in property <string> value;
+    in property <string> label;
+    in property <color> value-color: Theme.fg-primary;
+
+    alignment: center;
+    spacing: 2px;
+    padding: 8px;
+
+    Text {
+        text: icon;
+        font-size: 20px;
+        color: Theme.fg-secondary;
+        horizontal-alignment: center;
+    }
+
+    Text {
+        text: value;
+        font-size: Theme.font-stat-value;
+        color: value-color;
+        horizontal-alignment: center;
+        font-weight: 600;
+    }
+
+    Text {
+        text: label;
+        font-size: Theme.font-stat-label;
+        color: Theme.fg-dim;
+        horizontal-alignment: center;
+    }
+}
+
+// Helper function to get color based on percentage
+// Returns appropriate status color
+export component StatsBar inherits Rectangle {
+    in property <int> cpu: 0;
+    in property <int> ram: 0;
+    in property <int> temp: 0;
+    in property <int> disk: 0;
+    in property <string> network: "---";
+    in property <string> bluetooth: "---";
+
+    // Color helper - compute once per value change
+    pure function stat-color(value: int) -> color {
+        if value >= 80 { return Theme.status-critical; }
+        if value >= 60 { return Theme.status-warn; }
+        return Theme.status-good;
+    }
+
+    pure function temp-color(value: int) -> color {
+        if value >= 70 { return Theme.status-critical; }
+        if value >= 55 { return Theme.status-temp-warn; }
+        if value >= 45 { return Theme.status-warn; }
+        return Theme.status-good;
+    }
+
+    height: 80px;
+    background: Theme.bg-secondary;
+    border-radius: 8px;
+
+    HorizontalLayout {
+        alignment: space-around;
+        padding: 8px;
+
+        StatItem {
+            icon: "󰻠";  // CPU icon (nerd font)
+            value: cpu + "%";
+            label: "CPU";
+            value-color: stat-color(cpu);
+        }
+
+        StatItem {
+            icon: "󰍛";  // RAM icon
+            value: ram + "%";
+            label: "RAM";
+            value-color: stat-color(ram);
+        }
+
+        StatItem {
+            icon: "󰔏";  // Temp icon
+            value: temp + "°C";
+            label: "TEMP";
+            value-color: temp-color(temp);
+        }
+
+        StatItem {
+            icon: "󰋊";  // Disk icon
+            value: disk + "%";
+            label: "DISK";
+            value-color: stat-color(disk);
+        }
+
+        StatItem {
+            icon: "󰖩";  // Network icon
+            value: network;
+            label: "NET";
+            value-color: Theme.accent-cyan;
+        }
+
+        StatItem {
+            icon: "󰂯";  // Bluetooth icon
+            value: bluetooth;
+            label: "BT";
+            value-color: Theme.accent;
+        }
+    }
+}

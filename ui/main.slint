@@ -1,0 +1,122 @@
+import { Theme } from "themes/arc_blueberry.slint";
+import { Clock } from "components/clock.slint";
+import { AppGrid, AppInfo } from "components/app_grid.slint";
+import { StatsBar } from "components/stats_bar.slint";
+
+// Main window - fullscreen launcher
+export component MainWindow inherits Window {
+    title: "TvStreamer Launcher";
+    background: Theme.bg-primary;
+
+    // App data - set from Rust
+    in property <[AppInfo]> apps: [];
+    in-out property <int> selected-index: 0;
+
+    // Clock data - updated from Rust
+    in property <string> time: "12:00";
+    in property <string> date: "Monday, January 27";
+
+    // Stats data - updated from Rust (every 2s)
+    in property <int> cpu: 0;
+    in property <int> ram: 0;
+    in property <int> temp: 0;
+    in property <int> disk: 0;
+    in property <string> network: "---";
+    in property <string> bluetooth: "---";
+
+    // Grid config
+    in property <int> grid-columns: 4;
+
+    // Callbacks to Rust
+    callback app-activated(int);
+    callback key-pressed(string);
+    callback request-quit();
+    callback request-settings();
+
+    // Keyboard handling
+    forward-focus: focus-scope;
+
+    focus-scope := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                request-quit();
+                return accept;
+            }
+            if event.text == Key.Return {
+                app-activated(selected-index);
+                return accept;
+            }
+            if event.text == Key.LeftArrow {
+                if selected-index > 0 {
+                    selected-index -= 1;
+                }
+                return accept;
+            }
+            if event.text == Key.RightArrow {
+                if selected-index < apps.length - 1 {
+                    selected-index += 1;
+                }
+                return accept;
+            }
+            if event.text == Key.UpArrow {
+                if selected-index >= grid-columns {
+                    selected-index -= grid-columns;
+                }
+                return accept;
+            }
+            if event.text == Key.DownArrow {
+                if selected-index + grid-columns < apps.length {
+                    selected-index += grid-columns;
+                }
+                return accept;
+            }
+            if event.text == "s" || event.text == "S" {
+                request-settings();
+                return accept;
+            }
+            if event.text == "q" || event.text == "Q" {
+                request-quit();
+                return accept;
+            }
+            // Pass other keys to Rust
+            key-pressed(event.text);
+            return reject;
+        }
+    }
+
+    // Main layout
+    VerticalLayout {
+        padding: 40px;
+        spacing: 20px;
+
+        // Clock at top
+        Clock {
+            time: root.time;
+            date: root.date;
+        }
+
+        // Spacer
+        Rectangle { vertical-stretch: 1; }
+
+        // App grid in center
+        AppGrid {
+            apps: root.apps;
+            selected-index: root.selected-index;
+            columns: root.grid-columns;
+            app-activated(index) => { root.app-activated(index); }
+        }
+
+        // Spacer
+        Rectangle { vertical-stretch: 1; }
+
+        // Stats bar at bottom
+        StatsBar {
+            cpu: root.cpu;
+            ram: root.ram;
+            temp: root.temp;
+            disk: root.disk;
+            network: root.network;
+            bluetooth: root.bluetooth;
+        }
+    }
+}

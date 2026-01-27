@@ -1,0 +1,48 @@
+import { Theme } from "../themes/arc_blueberry.slint";
+import { AppTile } from "app_tile.slint";
+
+// App data structure
+export struct AppInfo {
+    name: string,
+    icon: string,
+    command: string,
+}
+
+// Grid of app tiles - handles selection and navigation
+export component AppGrid inherits Rectangle {
+    in property <[AppInfo]> apps;
+    in property <int> selected-index: 0;
+    in property <int> columns: 4;
+
+    callback app-activated(int);
+
+    // Calculate grid dimensions
+    property <int> rows: Math.ceil(apps.length / columns);
+
+    background: transparent;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: Theme.tile-spacing;
+
+        for row in rows: HorizontalLayout {
+            alignment: center;
+            spacing: Theme.tile-spacing;
+
+            for col in columns: Rectangle {
+                property <int> index: row * columns + col;
+                property <bool> valid: index < apps.length;
+
+                width: valid ? Theme.tile-width : 0px;
+                height: valid ? Theme.tile-height : 0px;
+
+                if valid: AppTile {
+                    name: apps[index].name;
+                    icon: apps[index].icon;
+                    selected: index == selected-index;
+                    clicked => { app-activated(index); }
+                }
+            }
+        }
+    }
+}

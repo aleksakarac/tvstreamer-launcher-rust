@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "theme": "arc_blueberry",
+  "apps": [
+    {
+      "name": "Kodi",
+      "command": "kodi",
+      "icon": "󰕼",
+      "icon_type": "glyph",
+      "hide_launcher": true
+    },
+    {
+      "name": "Stremio",
+      "command": "/home/aleksa/.local/bin/stremio",
+      "icon": "󰐊",
+      "icon_type": "glyph",
+      "hide_launcher": true
+    },
+    {
+      "name": "IPTV",
+      "command": "/home/aleksa/omarchy-iptv",
+      "icon": "󰕧",
+      "icon_type": "glyph",
+      "hide_launcher": true
+    },
+    {
+      "name": "Tidal",
+      "command": "tidal-hifi",
+      "icon": "󰝚",
+      "icon_type": "glyph",
+      "hide_launcher": true
+    },
+    {
+      "name": "Bluetooth",
+      "command": "blueman-manager",
+      "icon": "󰂯",
+      "icon_type": "glyph",
+      "hide_launcher": true
+    }
+  ],
+  "stats": {
+    "show_cpu": true,
+    "show_ram": true,
+    "show_temp": true,
+    "show_disk": true,
+    "show_network": true,
+    "show_bluetooth": true,
+    "update_interval_ms": 2000
+  },
+  "display": {
+    "backend": "auto",
+    "fullscreen": true,
+    "grid_columns": 4
+  },
+  "screensaver": {
+    "enabled": true,
+    "timeout_seconds": 300,
+    "show_clock": true,
+    "show_now_playing": true
+  },
+  "wallpaper": null
+}

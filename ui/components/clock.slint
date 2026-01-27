@@ -1,0 +1,27 @@
+import { Theme } from "../themes/arc_blueberry.slint";
+
+// Clock component - updates only when time changes
+export component Clock inherits VerticalLayout {
+    in property <string> time: "12:00";
+    in property <string> date: "Monday, January 27";
+
+    alignment: center;
+    spacing: 4px;
+
+    // Time display
+    Text {
+        text: time;
+        font-size: Theme.font-clock;
+        color: Theme.fg-primary;
+        horizontal-alignment: center;
+        font-weight: 300;
+    }
+
+    // Date display
+    Text {
+        text: date;
+        font-size: Theme.font-date;
+        color: Theme.fg-secondary;
+        horizontal-alignment: center;
+    }
+}
