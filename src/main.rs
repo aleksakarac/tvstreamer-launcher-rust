@@ -4,6 +4,7 @@
 
 mod config;
 mod launcher;
+mod media;
 mod system;
 mod ui;
 
@@ -32,6 +33,10 @@ fn main() {
     // Start system stats thread
     let stats = system::SystemStats::new();
     system::start_stats_thread(Arc::clone(&stats), config.stats.update_interval_ms);
+
+    // Start media monitoring thread (MPRIS + BlueZ)
+    let media_state = media::MediaState::new();
+    media::start_media_thread(Arc::clone(&media_state));
 
     // App process tracker
     let app_process = AppProcess::new();
@@ -118,11 +123,32 @@ fn main() {
         }
     });
 
+    // Media control callbacks
+    {
+        let media = Arc::clone(&media_state);
+        window.on_media_play_pause(move || {
+            media.play_pause();
+        });
+    }
+    {
+        let media = Arc::clone(&media_state);
+        window.on_media_next(move || {
+            media.next();
+        });
+    }
+    {
+        let media = Arc::clone(&media_state);
+        window.on_media_previous(move || {
+            media.previous();
+        });
+    }
+
     // Track last minute for clock updates
     let mut last_minute = ui::current_minute();
 
-    // Clone stats for timer closure
+    // Clone stats and media for timer closure
     let stats_for_timer = Arc::clone(&stats);
+    let media_for_timer = Arc::clone(&media_state);
 
     // Main event loop with timer for updates
     let window_weak = window.as_weak();
@@ -151,6 +177,24 @@ fn main() {
                 window.set_ram(ram);
                 window.set_temp(temp);
                 window.set_disk(disk);
+
+                // Update network and bluetooth status
+                let network = stats_for_timer.get_network();
+                let bluetooth = stats_for_timer.get_bluetooth();
+                window.set_network(network.into());
+                window.set_bluetooth(bluetooth.into());
+            }
+
+            // Check if media state changed
+            if media_for_timer.take_changed() {
+                let info = media_for_timer.get();
+                let is_active = info.is_active();
+                let is_playing = info.status == media::PlaybackStatus::Playing;
+                window.set_media_title(info.title.clone().into());
+                window.set_media_artist(info.artist.clone().into());
+                window.set_media_player(info.player_name.clone().into());
+                window.set_media_playing(is_playing);
+                window.set_media_active(is_active);
             }
         },
     );
@@ -160,4 +204,5 @@ fn main() {
 
     // Cleanup
     stats.stop();
+    media_state.stop();
 }

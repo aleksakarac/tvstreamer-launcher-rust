@@ -1,0 +1,138 @@
+import { Theme } from "../themes/arc_blueberry.slint";
+
+// Media control button
+component MediaButton inherits Rectangle {
+    in property <string> icon;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    width: 40px;
+    height: 40px;
+    border-radius: 20px;
+    background: touch.has-hover && enabled ? Theme.bg-tile-selected : transparent;
+    opacity: enabled ? 1.0 : 0.3;
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => { root.clicked(); }
+    }
+
+    Text {
+        text: icon;
+        font-size: 20px;
+        color: Theme.fg-primary;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// Now Playing bar - shows current media info and controls
+export component NowPlaying inherits Rectangle {
+    // Track info - set from Rust
+    in property <string> title: "";
+    in property <string> artist: "";
+    in property <string> player-name: "";
+    in property <bool> is-playing: false;
+    in property <bool> is-active: false;
+
+    // Control callbacks
+    callback play-pause-clicked;
+    callback next-clicked;
+    callback previous-clicked;
+
+    // Only show when media is active
+    visible: is-active;
+    height: is-active ? 70px : 0px;
+    background: Theme.bg-secondary;
+    border-radius: 8px;
+
+    HorizontalLayout {
+        padding: 12px;
+        padding-left: 20px;
+        padding-right: 20px;
+        spacing: 16px;
+
+        // Music icon
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 46px;
+                height: 46px;
+                border-radius: 8px;
+                background: Theme.bg-tile;
+
+                Text {
+                    text: "\u{f0388}";  // music-note icon (nerd font)
+                    font-size: 24px;
+                    color: Theme.accent-pink;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Track info
+        VerticalLayout {
+            alignment: center;
+            spacing: 2px;
+            horizontal-stretch: 1;
+
+            Text {
+                text: title;
+                font-size: 16px;
+                font-weight: 600;
+                color: Theme.fg-primary;
+                overflow: elide;
+                horizontal-alignment: left;
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Text {
+                    text: artist;
+                    font-size: 13px;
+                    color: Theme.fg-secondary;
+                    overflow: elide;
+                }
+
+                if player-name != "" : Text {
+                    text: " - " + player-name;
+                    font-size: 13px;
+                    color: Theme.fg-dim;
+                    overflow: elide;
+                }
+            }
+        }
+
+        // Playback controls
+        HorizontalLayout {
+            alignment: center;
+            spacing: 4px;
+
+            VerticalLayout {
+                alignment: center;
+                MediaButton {
+                    icon: "\u{f04ae}";  // skip-previous
+                    clicked => { previous-clicked(); }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                MediaButton {
+                    icon: is-playing ? "\u{f03e4}" : "\u{f040a}";  // pause or play
+                    clicked => { play-pause-clicked(); }
+                }
+            }
+
+            VerticalLayout {
+                alignment: center;
+                MediaButton {
+                    icon: "\u{f04ad}";  // skip-next
+                    clicked => { next-clicked(); }
+                }
+            }
+        }
+    }
+}

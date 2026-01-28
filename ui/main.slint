@@ -2,6 +2,7 @@ import { Theme } from "themes/arc_blueberry.slint";
 import { Clock } from "components/clock.slint";
 import { AppGrid, AppInfo } from "components/app_grid.slint";
 import { StatsBar } from "components/stats_bar.slint";
+import { NowPlaying } from "components/now_playing.slint";
 
 // Main window - fullscreen launcher
 export component MainWindow inherits Window {
@@ -27,11 +28,21 @@ export component MainWindow inherits Window {
     // Grid config
     in property <int> grid-columns: 4;
 
+    // Now Playing data - updated from Rust
+    in property <string> media-title: "";
+    in property <string> media-artist: "";
+    in property <string> media-player: "";
+    in property <bool> media-playing: false;
+    in property <bool> media-active: false;
+
     // Callbacks to Rust
     callback app-activated(int);
     callback key-pressed(string);
     callback request-quit();
     callback request-settings();
+    callback media-play-pause();
+    callback media-next();
+    callback media-previous();
 
     // Keyboard handling
     forward-focus: focus-scope;
@@ -108,6 +119,18 @@ export component MainWindow inherits Window {
 
         // Spacer
         Rectangle { vertical-stretch: 1; }
+
+        // Now Playing bar (between app grid and stats)
+        NowPlaying {
+            title: root.media-title;
+            artist: root.media-artist;
+            player-name: root.media-player;
+            is-playing: root.media-playing;
+            is-active: root.media-active;
+            play-pause-clicked => { root.media-play-pause(); }
+            next-clicked => { root.media-next(); }
+            previous-clicked => { root.media-previous(); }
+        }
 
         // Stats bar at bottom
         StatsBar {

@@ -4,15 +4,17 @@
 
 use nix::libc;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-/// Atomic stats container - lock-free updates
+/// Atomic stats container - lock-free updates for integers, RwLock for strings
 pub struct SystemStats {
     pub cpu: AtomicI32,
     pub ram: AtomicI32,
     pub temp: AtomicI32,
     pub disk: AtomicI32,
+    pub network: RwLock<String>,
+    pub bluetooth: RwLock<String>,
     pub changed: AtomicBool,
     running: AtomicBool,
 }
@@ -24,6 +26,8 @@ impl SystemStats {
             ram: AtomicI32::new(0),
             temp: AtomicI32::new(0),
             disk: AtomicI32::new(0),
+            network: RwLock::new("---".to_string()),
+            bluetooth: RwLock::new("---".to_string()),
             changed: AtomicBool::new(false),
             running: AtomicBool::new(true),
         })
@@ -39,7 +43,7 @@ impl SystemStats {
         self.changed.swap(false, Ordering::AcqRel)
     }
 
-    /// Get current values
+    /// Get current integer values
     pub fn get(&self) -> (i32, i32, i32, i32) {
         (
             self.cpu.load(Ordering::Relaxed),
@@ -47,6 +51,16 @@ impl SystemStats {
             self.temp.load(Ordering::Relaxed),
             self.disk.load(Ordering::Relaxed),
         )
+    }
+
+    /// Get network status string
+    pub fn get_network(&self) -> String {
+        self.network.read().unwrap().clone()
+    }
+
+    /// Get bluetooth status string
+    pub fn get_bluetooth(&self) -> String {
+        self.bluetooth.read().unwrap().clone()
     }
 }
 
@@ -65,12 +79,39 @@ impl CpuState {
     }
 }
 
+/// Network/Bluetooth poll counter (poll less frequently than CPU/RAM)
+struct SlowPollState {
+    counter: u64,
+    network_cache: String,
+    bluetooth_cache: String,
+}
+
+impl SlowPollState {
+    fn new() -> Self {
+        Self {
+            counter: 0,
+            network_cache: "---".to_string(),
+            bluetooth_cache: "---".to_string(),
+        }
+    }
+}
+
 /// Start background stats thread
 pub fn start_stats_thread(stats: Arc<SystemStats>, interval_ms: u64) {
     std::thread::spawn(move || {
         let mut cpu_state = CpuState::new();
+        let mut slow_poll = SlowPollState::new();
         // Reuse buffer for file reads
         let mut buffer = String::with_capacity(4096);
+
+        // Calculate how many iterations = ~3 seconds for network/bluetooth poll
+        let slow_poll_interval = (3000 / interval_ms).max(1);
+
+        // Create tokio runtime for async bluetooth operations
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .ok();
 
         while stats.running.load(Ordering::Acquire) {
             let new_cpu = read_cpu(&mut buffer, &mut cpu_state);
@@ -78,7 +119,40 @@ pub fn start_stats_thread(stats: Arc<SystemStats>, interval_ms: u64) {
             let new_temp = read_temp(&mut buffer);
             let new_disk = read_disk();
 
-            // Check if anything changed
+            // Poll network/bluetooth less frequently
+            slow_poll.counter += 1;
+            if slow_poll.counter >= slow_poll_interval {
+                slow_poll.counter = 0;
+
+                // Read network status (synchronous)
+                let new_network = read_network(&mut buffer);
+
+                // Read bluetooth status (async via tokio)
+                let new_bluetooth = if let Some(ref rt) = rt {
+                    rt.block_on(read_bluetooth())
+                } else {
+                    "---".to_string()
+                };
+
+                // Update caches if changed
+                if new_network != slow_poll.network_cache {
+                    slow_poll.network_cache = new_network;
+                    if let Ok(mut lock) = stats.network.write() {
+                        *lock = slow_poll.network_cache.clone();
+                    }
+                    stats.changed.store(true, Ordering::Release);
+                }
+
+                if new_bluetooth != slow_poll.bluetooth_cache {
+                    slow_poll.bluetooth_cache = new_bluetooth;
+                    if let Ok(mut lock) = stats.bluetooth.write() {
+                        *lock = slow_poll.bluetooth_cache.clone();
+                    }
+                    stats.changed.store(true, Ordering::Release);
+                }
+            }
+
+            // Check if integer stats changed
             let old_cpu = stats.cpu.load(Ordering::Relaxed);
             let old_ram = stats.ram.load(Ordering::Relaxed);
             let old_temp = stats.temp.load(Ordering::Relaxed);
@@ -237,6 +311,136 @@ fn read_disk() -> i32 {
         let used = total - free;
         ((used * 100) / total) as i32
     }
+}
+
+/// Read network status - returns SSID for WiFi or "Ethernet" for wired
+fn read_network(buffer: &mut String) -> String {
+    // Check common interface names for connectivity
+    let interfaces = ["wlan0", "eth0", "end0", "enp0s3", "eno1"];
+
+    for iface in interfaces {
+        let operstate_path = format!("/sys/class/net/{}/operstate", iface);
+
+        // Check if interface is up
+        if let Ok(state) = std::fs::read_to_string(&operstate_path) {
+            if state.trim() != "up" {
+                continue;
+            }
+
+            // Interface is up - check if it's wireless or wired
+            let wireless_path = format!("/sys/class/net/{}/wireless", iface);
+            if std::path::Path::new(&wireless_path).exists() {
+                // It's a wireless interface - try to get SSID
+                if let Some(ssid) = get_wifi_ssid(iface, buffer) {
+                    return ssid;
+                }
+                return "WiFi".to_string();
+            } else {
+                // It's a wired interface
+                return "Ethernet".to_string();
+            }
+        }
+    }
+
+    "---".to_string()
+}
+
+/// Get WiFi SSID using iwgetid command
+fn get_wifi_ssid(interface: &str, _buffer: &mut String) -> Option<String> {
+    // Try iwgetid first (most reliable)
+    if let Ok(output) = std::process::Command::new("iwgetid")
+        .arg(interface)
+        .arg("-r") // Raw SSID output
+        .output()
+    {
+        if output.status.success() {
+            let ssid = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !ssid.is_empty() {
+                // Truncate long SSIDs for display
+                if ssid.len() > 12 {
+                    return Some(format!("{}...", &ssid[..9]));
+                }
+                return Some(ssid);
+            }
+        }
+    }
+
+    // Fallback: try reading from /proc/net/wireless
+    // This only tells us if we're connected, not the SSID
+    None
+}
+
+/// Read Bluetooth status via D-Bus (BlueZ)
+async fn read_bluetooth() -> String {
+    match get_connected_bluetooth_device().await {
+        Ok(Some(name)) => {
+            // Truncate long device names for display
+            if name.len() > 12 {
+                format!("{}...", &name[..9])
+            } else {
+                name
+            }
+        }
+        Ok(None) => "---".to_string(),
+        Err(_) => "---".to_string(),
+    }
+}
+
+/// Query BlueZ over D-Bus for connected devices
+async fn get_connected_bluetooth_device() -> Result<Option<String>, zbus::Error> {
+    use zbus::zvariant::Value;
+
+    // Connect to system bus
+    let connection = zbus::Connection::system().await?;
+
+    // Get ObjectManager interface for BlueZ
+    let proxy = zbus::fdo::ObjectManagerProxy::builder(&connection)
+        .destination("org.bluez")?
+        .path("/")?
+        .build()
+        .await?;
+
+    // Get all managed objects
+    let objects = proxy.get_managed_objects().await?;
+
+    // Look for connected devices
+    for (_path, interfaces) in objects {
+        // Check if this is a device (has org.bluez.Device1 interface)
+        if let Some(device_props) = interfaces.get("org.bluez.Device1") {
+            // Check if device is connected
+            if let Some(connected) = device_props.get("Connected") {
+                let is_connected = match connected.downcast_ref::<Value>() {
+                    Ok(Value::Bool(b)) => b,
+                    _ => {
+                        // Try direct bool access
+                        match connected.downcast_ref::<bool>() {
+                            Ok(b) => b,
+                            _ => false,
+                        }
+                    }
+                };
+
+                if is_connected {
+                    // Get device name
+                    if let Some(name_value) = device_props.get("Name") {
+                        if let Ok(Value::Str(name)) = name_value.downcast_ref::<Value>() {
+                            return Ok(Some(name.to_string()));
+                        }
+                    }
+                    // Fallback to alias
+                    if let Some(alias_value) = device_props.get("Alias") {
+                        if let Ok(Value::Str(alias)) = alias_value.downcast_ref::<Value>() {
+                            return Ok(Some(alias.to_string()));
+                        }
+                    }
+                    // Found connected device but no name
+                    return Ok(Some("BT Device".to_string()));
+                }
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 #[cfg(test)]
